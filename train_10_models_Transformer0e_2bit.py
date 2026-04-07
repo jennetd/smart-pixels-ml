@@ -4,7 +4,7 @@
 training_name = 'Transformer0e_2bit'
 
 # Number of trainings to run
-n_tries = 2
+n_tries = 8
 
 # Gaussian noise parameters
 NOISE_MU = 0.0
