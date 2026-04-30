@@ -1,0 +1,15 @@
+Running training 0 of model Transformer0e_full
+Seed: 520
+Fingerprint: ab61c39b
+Running training 0 of model Transformer0e_full
+Seed: 94
+Fingerprint: fa225909
+Running training 0 of model Transformer0e_full
+Seed: 118
+Fingerprint: 94301190
+Running training 0 of model Transformer0e_full
+Seed: 254
+Fingerprint: 6a68e02a
+Running training 0 of model Transformer0e_full
+Seed: 94
+Fingerprint: 7de53cb2

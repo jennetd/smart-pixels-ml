@@ -1,0 +1,4 @@
+Running training 0 of model Transformer40e_3bit
+Seed: 227
+Initial thresholds: [449, 799, 1848, 1973, 2099, 2114, 2162]
+Fingerprint: 9289b6a2

@@ -1,0 +1,20 @@
+Running training 0 of model Transformer0e_3bit
+Seed: 188
+Initial thresholds: [666, 1119, 1173, 1584, 1854, 1964, 2995]
+Fingerprint: a05f2088
+Running training 0 of model Transformer0e_3bit
+Seed: 660
+Initial thresholds: [804, 1072, 1150, 1276, 1670, 2800, 2919]
+Fingerprint: f9fe08a4
+Running training 0 of model Transformer0e_3bit
+Seed: 458
+Initial thresholds: [220, 288, 877, 1861, 1914, 1941, 2587]
+Fingerprint: 6cd90e9d
+Running training 0 of model Transformer0e_3bit
+Seed: 483
+Initial thresholds: [633, 972, 1222, 1234, 1669, 2029, 2107]
+Fingerprint: 92381e83
+Running training 0 of model Transformer0e_3bit
+Seed: 160
+Initial thresholds: [2, 206, 941, 1365, 1382, 1492, 2598]
+Fingerprint: 1a942fd6

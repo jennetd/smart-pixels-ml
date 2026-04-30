@@ -1,0 +1,4 @@
+Running training 0 of model Transformer120e_2bit
+Seed: 550
+Initial thresholds: [671, 875, 1637]
+Fingerprint: 923bc2f5

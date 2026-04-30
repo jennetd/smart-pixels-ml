@@ -1,4 +1,4 @@
-import os
+import os, subprocess
 import random
 from datetime import datetime
 import time
@@ -21,6 +21,26 @@ from models import *
 
 minval=1e-9
 maxval=1e9
+
+def grep(string, filename):
+
+    out_list = []
+
+    cmd = "grep '" + string + "' " + filename
+    #print(cmd)
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+    # Get output data
+    cmd_out = result.stdout.splitlines()
+    for line in cmd_out:
+        #print(line)
+
+        if '#' in line:
+            print("Skipping line " + line)
+            continue
+        out_list += [line.split(':')[-1].strip()]
+
+    return out_list
 
 def gauss(x, A, mu, sigma):
     return A * np.exp(-(x - mu) ** 2 / (2 * sigma ** 2))

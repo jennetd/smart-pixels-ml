@@ -1,0 +1,3 @@
+Running training 0 of model Transformer80e_full
+Seed: 206
+Fingerprint: cbeb0147

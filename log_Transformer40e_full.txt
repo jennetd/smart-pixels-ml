@@ -1,0 +1,3 @@
+Running training 0 of model Transformer40e_full
+Seed: 398
+Fingerprint: e117d30d

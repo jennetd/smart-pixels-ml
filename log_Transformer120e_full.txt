@@ -1,0 +1,3 @@
+Running training 0 of model Transformer120e_full
+Seed: 816
+Fingerprint: 80e62895
