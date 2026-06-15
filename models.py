@@ -15,6 +15,12 @@ from SoftQuantizeLayer import SoftQuantizeLayer
 from AnnealingScheduler import AnnealingScheduler
 from tensorflow.keras.callbacks import CSVLogger, EarlyStopping, ModelCheckpoint, Callback
 
+def hard_quantize(x, levels, thresholds):
+        x_reshaped = tf.expand_dims(x, axis=-1) 
+        is_grt_th = x_reshaped > thresholds 
+        indices = tf.reduce_sum(tf.cast(is_grt_th, dtype=tf.int32), axis=-1) 
+        return tf.cast(tf.gather(levels, indices),tf.float32)
+
 def var_network(var, hidden=10, output=2):
     var = Flatten()(var)
     var = QDense(
@@ -61,15 +67,34 @@ def conv_network(var, n_filters=5, kernel_size=3):
     var = QActivation("quantized_tanh(4, 0, 1)")(var)    
     return var
 
-def CreateModel(shape, output, n_filters, pool_size, conv_kernel_size=3):
+# Max Conv2D model with hard quantization
+def CreateHQModel(shape, n_filters, output, pool_size, conv_kernel_size=3, levels=[0,1,2,3], thresholds=[0,100,200,300]):
+    x_base = x_in = Input(shape)
+
+    # Hard quantize
+    stack = hard_quantize(x_base, levels, thresholds)
+    
+    stack = conv_network(stack, kernel_size=conv_kernel_size)
+    
+    stack = AveragePooling2D(
+        pool_size=(pool_size, pool_size), 
+        strides=None, 
+        padding="valid", 
+        data_format=None,        
+    )(stack)
+    stack = QActivation("quantized_bits(8, 0, alpha=1)")(stack)
+    stack = var_network(stack, hidden=16, output=14)
+    model = Model(inputs=x_in, outputs=stack)
+    return model
+
+# Max Conv2D model with soft quantization
+def CreateSQModel(shape, output, n_filters, pool_size, conv_kernel_size=3, levels=[0,1,2,3], initial_thresholds=[10,100,200]):
     x_base = x_in = Input(shape)
     x_base = SoftQuantizeLayer(
         n_bits=2,
-        initial_thresholds = [247.80, 668.41, 1662.85],
-        # initial_levels = [0.0, 0.33333, 0.66667, 1.0],
-        initial_levels = [0.0, 1.0, 2.0, 3.0],
-        threshold_offset = -100000,
-        # initial_range=[-1.0, 1.0],
+        initial_thresholds = initial_thresholds,
+        initial_levels = levels,
+        threshold_offset = 0,
         trainable_levels=False,
         trainable_thresholds=True,
         initial_k=1.0,
@@ -88,31 +113,20 @@ def CreateModel(shape, output, n_filters, pool_size, conv_kernel_size=3):
     model = Model(inputs=x_in, outputs=stack)
     return model
 
-def CreateMFModel(shape, output, n_filters, pool_size, conv_kernel_size, mean_filter_size):
+def CreateSQModel_Conv2DSlim(shape, n_filters, pool_size, levels=[0,1,2,3], initial_thresholds=[10,100,200]):
     x_base = x_in = Input(shape)
     x_base = SoftQuantizeLayer(
         n_bits=2,
-        initial_thresholds = [247.80, 668.41, 1662.85],
-        # initial_levels = [0.0, 0.33333, 0.66667, 1.0],
-        initial_levels = [0.0, 1.0, 2.0, 3.0],
-        threshold_offset = -100000,
-        # initial_range=[-1.0, 1.0],
+        initial_thresholds = initial_thresholds,
+        initial_levels = levels,
+        threshold_offset = 0,
         trainable_levels=False,
         trainable_thresholds=True,
         initial_k=1.0,
         trainable_k=False,
         name='soft_quantizer_output'
     )(x_base)
-
-    # This is the mean filter
-    stack = AveragePooling2D(
-            pool_size=mean_filter_size, 
-            strides = (1, 1), 
-            padding = "same",
-            name = "mean_filter"
-        )(x_base)
-    
-    stack = conv_network(stack, kernel_size=conv_kernel_size)
+    stack = conv_network(x_base)
     stack = AveragePooling2D(
         pool_size=(pool_size, pool_size), 
         strides=None, 
@@ -120,7 +134,7 @@ def CreateMFModel(shape, output, n_filters, pool_size, conv_kernel_size, mean_fi
         data_format=None,        
     )(stack)
     stack = QActivation("quantized_bits(8, 0, alpha=1)")(stack)
-    stack = var_network(stack, hidden=16, output=output)
+    stack = var_network(stack, hidden=16, output=3)
     model = Model(inputs=x_in, outputs=stack)
     return model
 
@@ -272,6 +286,60 @@ def create_fullprecision_model(input_shape=(16,16,2),
                                final_outputs=14):
   # Input
   inp = layers.Input(shape=input_shape, name="raw_input")
+
+  # 1) Extract patches
+  patches = PatchExtractor(patch_size=patch_size)(inp)
+  
+  # Calculate how many patches we extracted:
+  #   (H // patch_h) * (W // patch_w)
+  # Must do it statically if possible:
+  # e.g. 13//3=4, 21//7=3 => 12 patches total
+  H, W, C = input_shape
+  ph, pw  = patch_size
+  num_patches = (H // ph) * (W // pw)
+
+  # 2) Encode patches (linear projection + positional embedding)
+  encoded_patches = PatchEncoder(num_patches, embed_dim)(patches)
+
+  # 3) Apply multiple Transformer encoder blocks
+  x = encoded_patches
+  for _ in range(num_layers):
+    x = transformer_encoder(x,
+                            head_size=embed_dim,
+                            num_heads=num_heads,
+                            ff_dim=ff_dim,
+                            dropout=dropout)
+  
+  # 4) Flatten and final Dense
+  x = layers.LayerNormalization(epsilon=1e-6)(x)
+  x = layers.Flatten()(x)
+  x = layers.Dense(64, activation='relu')(x)
+  outputs = layers.Dense(final_outputs, activation='linear')(x)
+
+  # Create model
+  model = keras.Model(inputs=inp, outputs=outputs)
+  return model
+
+
+def create_mf_fullprecision_model(input_shape=(16,16,2),
+                               patch_size=(3,7),
+                               embed_dim=64,
+                               num_heads=4,
+                               ff_dim=128,
+                               num_layers=4,
+                               dropout=0.1,
+                               mean_filter_size = (3, 3),
+                               final_outputs=14):
+  # Input
+  inp = layers.Input(shape=input_shape, name="raw_input")
+
+  # This is the mean filter
+  inp = AveragePooling2D(
+      pool_size=mean_filter_size, 
+      strides = (1, 1), 
+      padding = "same",
+      name = "mean_filter"
+  )(inp)
 
   # 1) Extract patches
   patches = PatchExtractor(patch_size=patch_size)(inp)

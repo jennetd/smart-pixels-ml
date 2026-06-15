@@ -31,3 +31,22 @@ def custom_loss(y, p_base, minval=1e-9, maxval=1e9, scale = 512):
     NLL = -1*tf.math.log(likelihood)
 
     return tf.keras.backend.sum(NLL) 
+
+def custom_sse_loss(y, p_base, minval=1e-9, maxval=1e9):
+
+    # truth values
+    x_true = y[:,0]
+    y_true = y[:,1]
+    cotB_true = y[:,2]
+
+    # predictions
+    p = p_base
+    x_pred = p[:,0]
+    y_pred = p[:,1]
+    cotB_pred = p[:,2]
+
+    sse_x = tf.reduce_sum(tf.square(x_true - x_pred))
+    sse_y = tf.reduce_sum(tf.square(y_true - y_pred))
+    sse_cotB = tf.reduce_sum(tf.square(cotB_true - cotB_pred))
+
+    return (sse_x + sse_y + sse_cotB) / 3.0
