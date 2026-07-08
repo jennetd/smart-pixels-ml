@@ -2,3 +2,23 @@ Running training 0 of model Transformer40e_2bit
 Seed: 537
 Initial thresholds: [1490, 2443, 2998]
 Fingerprint: baa2aecf
+Running training 0 of model Transformer40e_2bit
+Seed: 101
+Initial thresholds: [1213, 2970, 2992]
+Fingerprint: d7fb94d4
+Running training 0 of model Transformer40e_2bit
+Seed: 575
+Initial thresholds: [89, 107, 1060]
+Fingerprint: 5cd4c4f2
+Running training 0 of model Transformer40e_2bit
+Seed: 956
+Initial thresholds: [79, 100, 2967]
+Fingerprint: 46982dae
+#Running training 0 of model Transformer40e_2bit
+#Seed: 358
+#Initial thresholds: [70, 508, 996]
+#Fingerprint: 82bf542a
+Running training 0 of model Transformer40e_2bit
+Seed: 764
+Initial thresholds: [864, 1954, 2566]
+Fingerprint: 7c007476

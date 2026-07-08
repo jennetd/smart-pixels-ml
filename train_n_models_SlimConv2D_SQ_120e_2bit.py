@@ -1,11 +1,14 @@
 # MODEL DETAILS ---------------------------------------------------------------------
 
 # Training name
-training_name = 'Transformer0e_2bit'
+training_name = 'SlimConv2D_SQ_120e_2bit'
+
+# Initial thresholds from transformer
+initial_thresholds = [322,710,1699]
 
 # Gaussian noise parameters
 NOISE_MU = 0.0
-NOISE_SIGMA = 0.0 # e-
+NOISE_SIGMA = 120.0 # e-
 
 # Precision of input data
 N_BITS = 2
@@ -42,7 +45,7 @@ from keras.callbacks import CSVLogger, EarlyStopping, ModelCheckpoint, Callback
 import csv
 
 from DG.OptimizedDataGenerator_v2p5 import OptimizedDataGenerator
-from loss import custom_loss
+from loss import custom_sse_loss
 from SoftQuantizeLayer import SoftQuantizeLayer
 from AnnealingScheduler import AnnealingScheduler
 
@@ -55,13 +58,13 @@ minval=1e-9
 # TRAINING DATA ---------------------------------------------------------------------
 
 dataset_base_dir = "/uscms/home/bweiss/nobackup/smart-pixels/"
-tfrecords_base_dir = "/uscms/home/jennetd/nobackup/smart-pixels/tfrecords"
+tfrecords_base_dir = "/uscms/home/jennetd/nobackup/smart-pixels/tfrecords/"
 
 dataset_dir_train = os.path.join(dataset_base_dir, "dataset_3sr_16x16_50x12P5_centeredIncidence_parquets", 'train_contained/')
 dataset_dir_val = os.path.join(dataset_base_dir, "dataset_3sr_16x16_50x12P5_centeredIncidence_parquets", 'test_contained/')
 
-tfrecords_dir_train = os.path.join(tfrecords_base_dir, "TFR_train",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eNoise_train')
-tfrecords_dir_val   = os.path.join(tfrecords_base_dir, "TFR_val",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eNoise_test')
+tfrecords_dir_train = os.path.join(tfrecords_base_dir, "TFR_train",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eN_raw_slim')
+tfrecords_dir_val   = os.path.join(tfrecords_base_dir, "TFR_val",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eN_raw_slim')
 
 seeds = []
 
@@ -97,33 +100,19 @@ for i in range(n_tries):
         seed=seed,
         quantize=False,
     )
-
-    # Initial thresholds (2 bits)
-    th1 = random.randint(NOISE_SIGMA, 3000)
-    th0 = random.randint(NOISE_SIGMA, th1)
-    th2 = random.randint(th1, 3000)
-    thresholds = [th0,th1,th2]
     
-    print("Initial thresholds: ", thresholds)
+    print("Initial thresholds: ", initial_thresholds)
     with open('log_'+training_name+'.txt','a') as f:
-        f.write("Initial thresholds: " + str(thresholds) + "\n")
+        f.write("Initial thresholds: " + str(initial_thresholds) + "\n")
 
-    model = create_vit_model(input_shape=(16,16,2),   
-                             patch_size=(3,4),        
-                             embed_dim=64,           
-                             num_heads=4,            
-                             ff_dim=128,              
-                             num_layers=4,            
-                             dropout=0.1,        
-                             threshold_offset=NOISE_SIGMA,
-                             n_bits=N_BITS,
-                             initial_thresholds=thresholds,
-                             final_outputs=14         
-                            )
+    model = CreateSQModel_Conv2DSlim(shape = (16,16,2), 
+                          n_filters=5,
+                          pool_size=3,
+                          initial_thresholds=initial_thresholds)
 
     model.compile(
         optimizer=tf.keras.optimizers.Nadam(learning_rate=1e-3, clipnorm=1.0),
-        loss=custom_loss,
+        loss=custom_sse_loss,
     )
 
     fingerprint = '%08x' % random.randrange(16**8)
@@ -155,7 +144,7 @@ for i in range(n_tries):
         target_layer_name='soft_quantizer_output', 
         initial_k=1.0,
         final_k=67.0, 
-        verbose=1      
+        verbose=1     
     )
 
     quantizer_logger = SoftQuantizeLoggerCallback(

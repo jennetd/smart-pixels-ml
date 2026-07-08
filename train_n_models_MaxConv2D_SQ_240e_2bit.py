@@ -1,11 +1,14 @@
 # MODEL DETAILS ---------------------------------------------------------------------
 
 # Training name
-training_name = 'Transformer0e_2bit'
+training_name = 'MaxConv2D_SQ_240e_2bit'
+
+# Initial thresholds from transformer
+initial_thresholds = [508,844,1823]
 
 # Gaussian noise parameters
 NOISE_MU = 0.0
-NOISE_SIGMA = 0.0 # e-
+NOISE_SIGMA = 240.0 # e-
 
 # Precision of input data
 N_BITS = 2
@@ -97,29 +100,16 @@ for i in range(n_tries):
         seed=seed,
         quantize=False,
     )
-
-    # Initial thresholds (2 bits)
-    th1 = random.randint(NOISE_SIGMA, 3000)
-    th0 = random.randint(NOISE_SIGMA, th1)
-    th2 = random.randint(th1, 3000)
-    thresholds = [th0,th1,th2]
     
-    print("Initial thresholds: ", thresholds)
+    print("Initial thresholds: ", initial_thresholds)
     with open('log_'+training_name+'.txt','a') as f:
-        f.write("Initial thresholds: " + str(thresholds) + "\n")
+        f.write("Initial thresholds: " + str(initial_thresholds) + "\n")
 
-    model = create_vit_model(input_shape=(16,16,2),   
-                             patch_size=(3,4),        
-                             embed_dim=64,           
-                             num_heads=4,            
-                             ff_dim=128,              
-                             num_layers=4,            
-                             dropout=0.1,        
-                             threshold_offset=NOISE_SIGMA,
-                             n_bits=N_BITS,
-                             initial_thresholds=thresholds,
-                             final_outputs=14         
-                            )
+    model = CreateSQModel(shape = (16,16,2), 
+                          output = 14, 
+                          n_filters=5,
+                          pool_size=3,
+                          initial_thresholds=initial_thresholds)
 
     model.compile(
         optimizer=tf.keras.optimizers.Nadam(learning_rate=1e-3, clipnorm=1.0),
@@ -155,7 +145,7 @@ for i in range(n_tries):
         target_layer_name='soft_quantizer_output', 
         initial_k=1.0,
         final_k=67.0, 
-        verbose=1      
+        verbose=1     
     )
 
     quantizer_logger = SoftQuantizeLoggerCallback(

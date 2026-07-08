@@ -58,13 +58,13 @@ minval=1e-9
 # TRAINING DATA ---------------------------------------------------------------------
 
 dataset_base_dir = "/uscms/home/bweiss/nobackup/smart-pixels/"
-tfrecords_base_dir = "/uscms/home/jennetd/nobackup/smart-pixels/tfrecords"
+tfrecords_base_dir = "/uscms/home/jennetd/nobackup/smart-pixels/tfrecords/"
 
 dataset_dir_train = os.path.join(dataset_base_dir, "dataset_3sr_16x16_50x12P5_centeredIncidence_parquets", 'train_contained/')
 dataset_dir_val = os.path.join(dataset_base_dir, "dataset_3sr_16x16_50x12P5_centeredIncidence_parquets", 'test_contained/')
 
-tfrecords_dir_train = os.path.join(tfrecords_base_dir, "TFR_train",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eNoise_train')
-tfrecords_dir_val   = os.path.join(tfrecords_base_dir, "TFR_val",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eNoise_test')
+tfrecords_dir_train = os.path.join(tfrecords_base_dir, "TFR_train",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eN_raw_slim')
+tfrecords_dir_val   = os.path.join(tfrecords_base_dir, "TFR_val",'3sr_16x16_'+str(int(NOISE_SIGMA))+'eN_raw_slim')
 
 seeds = []
 

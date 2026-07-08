@@ -1,8 +1,4 @@
 Running training 0 of model Transformer0e_2bit
-Seed:  406
-Initial thresholds:  [71, 119, 1736]
-Fingerprint:  b9532e88
-Running training 0 of model Transformer0e_2bit
 Seed:  646
 Initial thresholds:  []
 Fingerprint:  31ac8cc6
@@ -19,6 +15,6 @@ Seed: 553
 Initial thresholds: [106, 266, 1991]
 Fingerprint: bb8a5790
 Running training 0 of model Transformer0e_2bit
-Seed: 176
-Initial thresholds: [533, 2573, 2724]
-Fingerprint: f416aef9
+Seed: 410
+Initial thresholds: [678, 1263, 2260]
+Fingerprint: 3739bb37

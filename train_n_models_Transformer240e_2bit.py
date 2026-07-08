@@ -1,11 +1,11 @@
 # MODEL DETAILS ---------------------------------------------------------------------
 
 # Training name
-training_name = 'Transformer0e_2bit'
+training_name = 'Transformer240e_2bit'
 
 # Gaussian noise parameters
 NOISE_MU = 0.0
-NOISE_SIGMA = 0.0 # e-
+NOISE_SIGMA = 240.0 # e-
 
 # Precision of input data
 N_BITS = 2
@@ -155,7 +155,7 @@ for i in range(n_tries):
         target_layer_name='soft_quantizer_output', 
         initial_k=1.0,
         final_k=67.0, 
-        verbose=1      
+        verbose=1     
     )
 
     quantizer_logger = SoftQuantizeLoggerCallback(

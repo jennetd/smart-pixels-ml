@@ -68,7 +68,7 @@ def rescale(df, scale_factor):
 
     return df
 
-def construct_df(model, test_generator, scale_factor):
+def construct_df(model, test_generator, scale_factor, is2s = False):
 
     # predicts test data
     p_test = model.predict(test_generator)
@@ -103,6 +103,15 @@ def construct_df(model, test_generator, scale_factor):
     extra_columns = ['M11','M22','M33','M44','M21','M31','M32', 'M41', 'M42', 'M43']
     df.drop(labels=extra_columns, axis=1, inplace=True)
 
+    scale_factor_3sr = {'x':123.36842467213701,
+                        'y':30.935225317219164,
+                        'cotA':6.528905408493022,
+                        'cotB':1.8827422609846889
+                       }
+    
+    if is2s:
+        df['cotBtrue'] = complete_truth[:,3]*scale_factor['cotB']/scale_factor_3sr['cotB']
+
     df = rescale(df, scale_factor)
 
     # calculates residuals for x, y, cotA, cotB
@@ -113,6 +122,53 @@ def construct_df(model, test_generator, scale_factor):
                 df['pull'+v] = (df[v] - df[v+'true'])/df['sigma'+v]
 
     for v in ['cotA','cotB']:
+        if v in df.columns:
+            df[v[-1]] = inverse_cot(df[v])*180/np.pi
+            df[v[-1]+'true'] = inverse_cot(df[v+'true'])*180/np.pi
+            df['residual'+v[-1]] = (df[v[-1]] - df[v[-1]+'true'])
+
+    return df
+
+def construct_df_slim(model, test_generator, scale_factor, is2s = False):
+
+    # predicts test data
+    p_test = model.predict(test_generator)
+
+    # Jennet: TBH not sure why this is needed but ok
+    complete_truth = None
+    for _, y in tqdm(test_generator):
+        if complete_truth is None:
+            complete_truth = y
+        else:
+            complete_truth = np.concatenate((complete_truth, y), axis=0)
+
+    # creates df with all predicted values and matrix elements - 4 predictions, all 10 unique matrix elements
+    df = pd.DataFrame(p_test,columns=['x','y','cotB'])
+
+    scale_factor_3sr = {'x':123.36842467213701,
+                        'y':30.935225317219164,
+                        'cotA':6.528905408493022,
+                        'cotB':1.8827422609846889
+                       }
+
+    # stores all true values in same matrix as xtrue, ytrue, etc.
+    df['xtrue'] = complete_truth[:,0]
+    df['ytrue'] = complete_truth[:,1]
+    df['cotBtrue'] = complete_truth[:,2]
+
+    if is2s:
+        df['cotBtrue'] = complete_truth[:,2]*scale_factor['cotB']/scale_factor_3sr['cotB']
+
+    df = rescale(df, scale_factor)
+
+    # calculates residuals for x, y, cotA, cotB
+    for v in ['x','y','cotB']:
+        if v in df.columns:
+            df['residual'+v] = (df[v] - df[v+'true'])
+            if 'sigma'+v in df.columns:
+                df['pull'+v] = (df[v] - df[v+'true'])/df['sigma'+v]
+
+    for v in ['cotB']:
         if v in df.columns:
             df[v[-1]] = inverse_cot(df[v])*180/np.pi
             df[v[-1]+'true'] = inverse_cot(df[v+'true'])*180/np.pi
@@ -248,6 +304,48 @@ def residual_plot_deg(ax, thisdf, var1, var2, name, scaling=1.0):
     #ax.scatter(x=np.linspace(xmin,xmax,nbins),y=means)
     ax.fill_between(x=np.linspace(xmin,xmax,nbins),y1=upbar,y2=downbar, alpha=0.2)
 
+def residual_plot_slim(ax, thisdf, var1, var2, name, lims=[-1,1]):
+
+    vbl_names = {'x':r'$R_x$ [um]', 'y':r'$R_y$ [um]', 'A':r'$R_\alpha$ [deg]', 'B':r'$R_\beta$ [deg]'}
+    
+    nbins = 11 
+    [xmin, xmax] = lims 
+    step = 1.0*(xmax-xmin)/nbins
+
+    bins = np.linspace(xmin,xmax,nbins)[:-1] + step/2
+    
+    ax.set_xlabel('True ' + name, fontsize=fontsize)
+    ax.set_ylabel(vbl_names[var2], fontsize=fontsize)
+    
+    means = []
+    up68 = []
+    down68 = []
+    upbar = []
+    downbar = []
+    
+    for i in range(0,nbins-1):
+
+        df_i = thisdf[(thisdf[var1]>xmin + i*step) & (thisdf[var1]<xmin + (i+1)*step)]
+        
+        means += [np.mean(df_i['residual'+var2])]
+        interval68 =shortest_interval_68(df_i['residual'+var2], center_type='mean')
+        up68 += [interval68['error_high']]
+        down68 += [interval68['error_low']]
+
+    ax.plot([xmin+step/2,xmax-step/2],[0,0],color='black',linestyle=':')
+    if var2 == "x":
+        ax.plot([xmin+step/2,xmax-step/2],[50/np.sqrt(12),50/np.sqrt(12)],color='black',linestyle=':')
+        ax.plot([xmin+step/2,xmax-step/2],[-50/np.sqrt(12),-50/np.sqrt(12)],color='black',linestyle=':')
+    if var2 == "y":
+        ax.plot([xmin+step/2,xmax-step/2],[12.5/np.sqrt(12),12.5/np.sqrt(12)],color='black',linestyle=':')
+        ax.plot([xmin+step/2,xmax-step/2],[-12.5/np.sqrt(12),-12.5/np.sqrt(12)],color='black',linestyle=':')
+        
+    line = ax.errorbar(x=bins,y=means,yerr=[down68,up68],marker='o',markersize=3,capsize=2)
+    #line = ax.plot(bins,means,marker='o',markersize=3)
+    #ax.fill_between(x=bins,y1=upbar,y2=downbar, alpha=0.2)
+
+    return [line]
+
 # From Sofi
 def shortest_interval_68(data, center_type='mean'):
     """
@@ -308,36 +406,40 @@ def draw_one_vbl_slim(vbl, x, d, names, ax_ii):
 
     return [line], [dot1,dot2,dot3,dot4]
 
-def draw_one_vbl(vbl, x, d, ax_ii, vbl_names):
+def draw_one_vbl(vbl, x, d, ax_ii, vbl_names, color=None, marker='o'):
+
+    if color == None:
+        color = colors[x]
     
-    x_array = [-1*x+0.3]
+    x_array = [-1*x]
     y_array = [d['mean_'+vbl]]
     yerr_array = [[d['down68_'+vbl]],[d['up68_'+vbl]]]
     yerr2_array = [[d['mean_downsigma'+vbl]],[d['mean_upsigma'+vbl]]]
     
     
-    line1 = ax_ii.errorbar(x = y_array, y = x_array, xerr=yerr_array, color = colors[x], linestyle='')
-    line2 = ax_ii.errorbar(x = y_array, y = x_array, xerr=yerr2_array, elinewidth=10, alpha=0.2, color = colors[x], linestyle='')
+    line1 = ax_ii.errorbar(x = y_array, y = x_array, xerr=yerr_array, color = color, linestyle='')
+    line2 = ax_ii.errorbar(x = y_array, y = x_array, xerr=yerr2_array, elinewidth=10, alpha=0.2, color = color, linestyle='')
     
-    dot1 = ax_ii.scatter(y_array, x_array, marker='o', color = colors[x])
+    dot1 = ax_ii.scatter(y_array, x_array, marker=marker, color = color)
     
     ax_ii.set_xlabel(vbl_names[vbl],fontsize=fontsize)
     ax_ii.set_yticks([])
+    ax_ii.set_ylim([-1*x - 0.7, 0.7])
 
     return [line1,line2], [dot1]
     
-def draw_one_model(x, d, names, ax, vbl_names, slim = False):
+def draw_one_model(x, d, names, ax, vbl_names, color=None, marker='o', slim = False):
 
     if slim:     
-        line, dots = draw_one_vbl_slim('x', x, d, ax[1][0], vbl_names)
-        line, dots = draw_one_vbl_slim('y', x, d, ax[1][1], vbl_names)
-        line, dots = draw_one_vbl_slim('B', x, d, ax[1][2], vbl_names)
+        line, dots = draw_one_vbl_slim('x', x, d, ax[1][0], vbl_names, color=color, marker=marker)
+        line, dots = draw_one_vbl_slim('y', x, d, ax[1][1], vbl_names, color=color, marker=marker)
+        line, dots = draw_one_vbl_slim('B', x, d, ax[1][2], vbl_names, color=color, marker=marker)
         
     else:
-        line, dots = draw_one_vbl('x', x, d, ax[1][0], vbl_names)
-        line, dots = draw_one_vbl('y', x, d, ax[1][1], vbl_names)
-        line, dots = draw_one_vbl('A', x, d, ax[1][2], vbl_names)
-        line, dots = draw_one_vbl('B', x, d, ax[1][3], vbl_names)
+        line, dots = draw_one_vbl('x', x, d, ax[1][0], vbl_names, color=color, marker=marker)
+        line, dots = draw_one_vbl('y', x, d, ax[1][1], vbl_names, color=color, marker=marker)
+        line, dots = draw_one_vbl('A', x, d, ax[1][2], vbl_names, color=color, marker=marker)
+        line, dots = draw_one_vbl('B', x, d, ax[1][3], vbl_names, color=color, marker=marker)
 
     return line, dots
 
