@@ -145,11 +145,9 @@ def construct_df_slim(model, test_generator, scale_factor, is2s = False):
     # creates df with all predicted values and matrix elements - 4 predictions, all 10 unique matrix elements
     df = pd.DataFrame(p_test,columns=['x','y','cotB'])
 
-    scale_factor_3sr = {'x':123.36842467213701,
-                        'y':30.935225317219164,
-                        'cotA':6.528905408493022,
-                        'cotB':1.8827422609846889
-                       }
+    scale_factor_3sr = {'x': 123.00090417782907, 
+                        'y': 30.90504383447792, 
+                        'cotB': 1.8788316156238876}
 
     # stores all true values in same matrix as xtrue, ytrue, etc.
     df['xtrue'] = complete_truth[:,0]

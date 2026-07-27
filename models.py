@@ -46,7 +46,7 @@ def var_network(var, hidden=10, output=2):
         kernel_regularizer=tf.keras.regularizers.L1L2(0.01),
     )(var)
 
-def conv_network(var, n_filters=5, kernel_size=3):
+def conv2d_network(var, n_filters=5, kernel_size=3):
     var = QSeparableConv2D(
         n_filters,kernel_size,
         depthwise_quantizer=quantized_bits(4, 0, 1, alpha=1),
@@ -67,15 +67,108 @@ def conv_network(var, n_filters=5, kernel_size=3):
     var = QActivation("quantized_tanh(4, 0, 1)")(var)    
     return var
 
+def conv1d_network(var, n_filters=5, kernel_size=3):
+    nrows = var.shape[1] # 13, for now
+    ncols = var.shape[2] # 20, for now
+    timeslices = var.shape[3] # either 20 or 2, for now
+    proj_x = AveragePooling2D(
+        pool_size=(1, 16),
+        strides=None,
+        padding="valid",
+        data_format=None,
+        name="avg_pooling_2d_proj_x"
+    )(var)
+    proj_x = Reshape((nrows, timeslices), name="reshape_proj_x")(proj_x)
+    proj_y = AveragePooling2D(
+        pool_size=(nrows, 1),
+        strides=None,
+        padding="valid",
+        data_format=None,
+        name="avg_pooling_2d_proj_y"
+    )(var)
+    proj_y = Reshape((ncols, timeslices), name="reshape_proj_y")(proj_y)
+
+    proj_x = QConv1D(
+        n_filters,kernel_size,
+        kernel_quantizer=quantized_bits(4, 0, 1, alpha=1),
+        bias_quantizer=quantized_bits(4, 0, 1, alpha=1),
+        kernel_regularizer=tf.keras.regularizers.L1L2(0.01),
+        bias_regularizer=tf.keras.regularizers.L1L2(0.01),
+        activity_regularizer=tf.keras.regularizers.L2(0.01),
+        name="conv1d_proj_x"
+    )(proj_x)
+
+    proj_y = QConv1D(
+        n_filters,kernel_size,
+        kernel_quantizer=quantized_bits(4, 0, 1, alpha=1),
+        bias_quantizer=quantized_bits(4, 0, 1, alpha=1),
+        kernel_regularizer=tf.keras.regularizers.L1L2(0.01),
+        bias_regularizer=tf.keras.regularizers.L1L2(0.01),
+        activity_regularizer=tf.keras.regularizers.L2(0.01),
+        name="conv1d_proj_y"
+    )(proj_y)
+
+    var = Concatenate(axis=1, name="concatenate")([proj_x, proj_y])
+    var = QActivation("quantized_tanh(4, 0, 1)", name="activation_tanh_1")(var)
+
+    return var
+
+def mlp_encoder_network(var, hidden=16, hidden_dimx=16, hidden_dimy=16):
+    proj_x = AveragePooling2D(
+        pool_size=(1, hidden_dimx), 
+        strides=None, 
+        padding="valid", 
+        data_format=None,        
+    )(var)
+    proj_x = Flatten()(proj_x)
+
+    proj_y = AveragePooling2D(
+        pool_size=(hidden_dimy, 1), 
+        strides=None, 
+        padding="valid", 
+        data_format=None,        
+    )(var)
+    proj_y = Flatten()(proj_y)
+
+    proj_x = QDense(
+        hidden_dimx,
+        kernel_quantizer=quantized_bits(8, 0, alpha=1),
+        bias_quantizer=quantized_bits(8, 0, alpha=1),
+        kernel_regularizer=tf.keras.regularizers.L1L2(0.01),
+        activity_regularizer=tf.keras.regularizers.L2(0.01),
+    )(proj_x)
+    proj_x = QActivation("quantized_relu(bits=13, integer=5)")(proj_x)
+
+    proj_y = QDense(
+        hidden_dimy,
+        kernel_quantizer=quantized_bits(8, 0, alpha=1),
+        bias_quantizer=quantized_bits(8, 0, alpha=1),
+        kernel_regularizer=tf.keras.regularizers.L1L2(0.01),
+        activity_regularizer=tf.keras.regularizers.L2(0.01),
+    )(proj_y)
+    proj_y = QActivation("quantized_relu(bits=13, integer=5)")(proj_y)
+
+    var = Concatenate(axis=1)([proj_x, proj_y])
+
+    var = QDense(
+        hidden,
+        kernel_quantizer=quantized_bits(8, 0, alpha=1),
+        bias_quantizer=quantized_bits(8, 0, alpha=1),
+        kernel_regularizer=tf.keras.regularizers.L1L2(0.01),
+        activity_regularizer=tf.keras.regularizers.L2(0.01),
+    )(var)
+
+    var = QActivation("quantized_tanh(8, 0, 1)")(var)
+    return var
+
+
 # Max Conv2D model with hard quantization
 def CreateHQModel(shape, n_filters, output, pool_size, conv_kernel_size=3, levels=[0,1,2,3], thresholds=[0,100,200,300]):
     x_base = x_in = Input(shape)
 
     # Hard quantize
-    stack = hard_quantize(x_base, levels, thresholds)
-    
-    stack = conv_network(stack, kernel_size=conv_kernel_size)
-    
+    stack = hard_quantize(x_base, levels, thresholds)  
+    stack = conv2d_network(stack, n_filters=n_filters, kernel_size=conv_kernel_size) 
     stack = AveragePooling2D(
         pool_size=(pool_size, pool_size), 
         strides=None, 
@@ -101,7 +194,7 @@ def CreateSQModel(shape, output, n_filters, pool_size, conv_kernel_size=3, level
         trainable_k=False,
         name='soft_quantizer_output'
     )(x_base)
-    stack = conv_network(x_base, kernel_size=conv_kernel_size)
+    stack = conv2d_network(x_base, n_filters=n_filters, kernel_size=conv_kernel_size)
     stack = AveragePooling2D(
         pool_size=(pool_size, pool_size), 
         strides=None, 
@@ -126,7 +219,7 @@ def CreateSQModel_Conv2DSlim(shape, n_filters, pool_size, levels=[0,1,2,3], init
         trainable_k=False,
         name='soft_quantizer_output'
     )(x_base)
-    stack = conv_network(x_base)
+    stack = conv2_network(x_base,n_filters=n_filters)
     stack = AveragePooling2D(
         pool_size=(pool_size, pool_size), 
         strides=None, 
@@ -134,6 +227,42 @@ def CreateSQModel_Conv2DSlim(shape, n_filters, pool_size, levels=[0,1,2,3], init
         data_format=None,        
     )(stack)
     stack = QActivation("quantized_bits(8, 0, alpha=1)")(stack)
+    stack = var_network(stack, hidden=16, output=3)
+    model = Model(inputs=x_in, outputs=stack)
+    return model
+
+def CreateSQModel_Conv1DSlim(shape, n_filters, levels=[0,1,2,3], initial_thresholds=[10,100,200]):
+    x_base = x_in = Input(shape)
+    x_base = SoftQuantizeLayer(
+        n_bits=2,
+        initial_thresholds = initial_thresholds,
+        initial_levels = levels,
+        threshold_offset = 0,
+        trainable_levels=False,
+        trainable_thresholds=True,
+        initial_k=1.0,
+        trainable_k=False,
+        name='soft_quantizer_output'
+    )(x_base)
+    stack = conv1d_network(x_base, n_filters=n_filters)
+    stack = var_network(stack, hidden=16, output=3)
+    model = Model(inputs=x_in, outputs=stack)
+    return model
+
+def CreateSQModel_MLPSlim(shape, levels=[0,1,2,3], initial_thresholds=[10,100,200]):
+    x_base = x_in = Input(shape)
+    x_base = SoftQuantizeLayer(
+        n_bits=2,
+        initial_thresholds = initial_thresholds,
+        initial_levels = levels,
+        threshold_offset = 0,
+        trainable_levels=False,
+        trainable_thresholds=True,
+        initial_k=1.0,
+        trainable_k=False,
+        name='soft_quantizer_output'
+    )(x_base)
+    stack = mlp_encoder_network(x_base)
     stack = var_network(stack, hidden=16, output=3)
     model = Model(inputs=x_in, outputs=stack)
     return model
